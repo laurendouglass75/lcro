@@ -54,7 +54,7 @@ def rank_order(actuals, predictions, n_bins = 13, tiercuts = None, monotonicity_
     if tiercuts is not None:
         df = custom_cut(df, 'pred', 'actual', tiercuts)
     else:
-        df = custom_qcut(df, 'pred', 'actual', 13)
+        df = custom_qcut(df, 'pred', 'actual', n_bins)
     pred_agg = df.groupby('pred_bin', observed = False)['actual'].mean().reset_index()
     act_agg = df.groupby('actual_bin', observed = False)['actual'].mean().reset_index()
 
