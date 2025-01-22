@@ -3,9 +3,34 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 from scipy.stats import spearmanr
+import shap
 
 import warnings
 warnings.filterwarnings('ignore')
+
+def slope_score(actuals, predictions, n_bins = 13, tiercuts = None):
+    """
+    Simplified function to calculate the slope score of actuals and predictions
+    as (last tier average - first tier average based on predictions) / 
+    (last tier average - first tier average based on actuals)
+
+    :param actuals: Array of actuals.
+    :param predictions: Array of predictions.
+    :param n_bins: How many tiers to cut predictions into for calculation. Default = 13
+    :param tiercuts: List of scalars or list of tuples, explicit tiers to cut predictions into. Default: None
+    """
+    df = pd.DataFrame({'pred': predictions, 'actual': actuals})
+    if tiercuts is not None:
+        df = custom_cut(df, 'pred', 'actual', tiercuts)
+    else:
+        df = custom_qcut(df, 'pred', 'actual', n_bins)
+    pred_agg = df.groupby('pred_bin', observed = False)['actual'].mean().reset_index()
+    act_agg = df.groupby('actual_bin', observed = False)['actual'].mean().reset_index()
+
+    pred_slope = pred_agg['actual'].iloc[-1] - pred_agg['actual'].iloc[0]
+    perfect_slope = act_agg['actual'].iloc[-1] - act_agg['actual'].iloc[0]
+    slope = pred_slope / perfect_slope
+    return slope
 
 
 def rank_order(actuals, predictions, n_bins = 13, tiercuts = None, monotonicity_method = 'spearman', 
@@ -257,3 +282,33 @@ def generate_data(n_samples = 10, n_tiers = 13, prob_dist = probabilities, max_v
         probs = prob_dist[row]
         arr[row] = np.random.choice(range(max_value + 1), size=n_samples, p=probs)
     return arr
+
+def simple_shap_plot(model, dataset, feature_list, check_additivity = True):
+    """
+    Creates a simple feature importance plot using shap values.
+
+    The graph plots the "average shap value when this feature is >= 1" - so 
+    when a one-hot feature is a "yes" or when a standard scaled numeric feature is
+    at least one standard deviation above the mean
+
+    :param model: model you have trained
+    :param dataset: dataset you want to evaluate feature importance on
+    :param feature_list: list of input features to the model (i.e. ['make', 'size'])
+    :param check_additivity: set this to false if you get errors [default: True]
+    """
+    explainer = shap.Explainer(model, dataset[feature_list])
+    shap_values = explainer(dataset[feature_list], check_additivity = check_additivity)
+    shap_vals = np.array(shap_values.values) # actual shap value for each feature for each row in dset
+    shap_data = np.array(shap_values.data) # original data point for that feature & that row
+    shap_values = np.stack((shap_vals, shap_data), axis = -1) # combine into one array
+    positive_mask = shap_values[:, :, 1] >= 1 # mask where data point is >= 1
+    positive_values = np.where(positive_mask, shap_values[:, :, 0], np.nan) # see shap values for data points that are >= 1
+    mean_shap = np.nanmean(positive_values, axis = 0) # get avg shap for each feature when data point >= 1
+    shap_df = pd.DataFrame({'Feature': feature_list, 'Importance': mean_shap})
+    shap_df = shap_df.sort_values(by = 'Importance', ascending = False)
+    plt.barh(shap_df['Feature'], shap_df['Importance'])
+
+    plt.xticks([])
+    plt.axvline(x = 0, color = 'black')
+    plt.tight_layout()
+    plt.show()
