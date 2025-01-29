@@ -289,7 +289,7 @@ def simple_shap_plot(model, dataset, feature_list, check_additivity = True):
 
     The graph plots the "average shap value when this feature is >= 1" - so 
     when a one-hot feature is a "yes" or when a standard scaled numeric feature is
-    at least one standard deviation above the mean
+    at least one standard deviation above the mean.
 
     :param model: model you have trained
     :param dataset: dataset you want to evaluate feature importance on
